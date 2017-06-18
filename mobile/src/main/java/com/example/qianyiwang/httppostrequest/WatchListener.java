@@ -1,16 +1,12 @@
 package com.example.qianyiwang.httppostrequest;
 
-import android.content.BroadcastReceiver;
-import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.os.AsyncTask;
-import android.support.v7.app.AppCompatActivity;
-import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
-import android.widget.Button;
-import android.widget.TextView;
+import android.widget.Toast;
+
+import com.google.android.gms.wearable.MessageEvent;
+import com.google.android.gms.wearable.WearableListenerService;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -21,32 +17,23 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.ProtocolException;
 import java.net.URL;
-import java.util.Random;
 
-public class MainApp extends AppCompatActivity {
+/**
+ * Created by qianyiwang on 2/7/17.
+ */
 
-    Button httpPost;
-    TextView responseText;
+public class WatchListener extends WearableListenerService {
+    public static String START_ACTIVITY_PATH = "/from-watch";
+    public static final String BROADCAST_ACTION = "message_from_watch";
+    Intent broadCastIntent;
     URL url;
     private static final String urlString = "https://dynamicchart.mybluemix.net/receiveData/";
 
-    BroadcastReceiver broadcastReceiver;
-
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main_app);
-
-        httpPost = (Button)findViewById(R.id.httpPost);
-        httpPost.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Random rand = new Random();
-                int  n = rand.nextInt(100) + 1;
-                HttpPostRequest httpPost = new HttpPostRequest();
-                httpPost.execute(n);
-            }
-        });
+    public void onCreate() {
+        super.onCreate();
+        broadCastIntent = new Intent(BROADCAST_ACTION);
+        Toast.makeText(this, "WatchListener Bind", Toast.LENGTH_SHORT).show();
 
         try {
             url = new URL(urlString);
@@ -55,30 +42,37 @@ public class MainApp extends AppCompatActivity {
         } catch (MalformedURLException e) {
             e.printStackTrace();
         }
-
-        responseText = (TextView)findViewById(R.id.responseText);
-
-        broadcastReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                receiveBroadcast(intent);
-            }
-        };
-        registerReceiver(broadcastReceiver, new IntentFilter(WatchListener.BROADCAST_ACTION));
-    }
-
-    private void receiveBroadcast(Intent intent) {
-        String msg_broadcast = intent.getStringExtra("msg_broadcast");
-        responseText.setText(msg_broadcast);
     }
 
     @Override
-    protected void onDestroy() {
+    public void onDestroy() {
         super.onDestroy();
-        unregisterReceiver(broadcastReceiver);
+        Toast.makeText(this, "WatchListener Unbind", Toast.LENGTH_SHORT).show();
+
     }
 
-    public class HttpPostRequest extends AsyncTask<Integer, Void, String>{
+    @Override
+    public void onMessageReceived(MessageEvent messageEvent) {
+        if (messageEvent.getPath().equalsIgnoreCase(START_ACTIVITY_PATH)){
+            String msg_watch = new String(messageEvent.getData());
+            if(msg_watch.contains("hr:")){
+                int hr = Integer.parseInt(msgParsing(msg_watch));
+                HttpPostRequest httpPost = new HttpPostRequest();
+                httpPost.execute(hr);
+            }
+
+            Log.e("WatchListener",msg_watch);
+        }
+    }
+
+    // parse hr value
+    private String msgParsing(String msg){
+        int pos = msg.indexOf(':');
+        return msg.substring(pos+1);
+    }
+
+    // **********send HTTP post request**********************
+    public class HttpPostRequest extends AsyncTask<Integer, Void, String> {
         String resultToDisplay = "";
         int id;
         @Override
@@ -102,12 +96,10 @@ public class MainApp extends AppCompatActivity {
                     Log.i("MSG", client.getResponseMessage());
                     resultToDisplay = client.getResponseMessage();
                     id = client.getResponseCode();
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            responseText.setText(id + "--" + resultToDisplay);
-                        }
-                    });
+
+                    // send response to main app
+                    broadCastIntent.putExtra("msg_broadcast", id+resultToDisplay+" data:"+i);
+                    sendBroadcast(broadCastIntent);
 
                     client.disconnect();
                 } catch (JSONException e) {
