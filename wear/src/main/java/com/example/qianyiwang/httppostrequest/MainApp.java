@@ -13,6 +13,7 @@ import android.support.annotation.Nullable;
 import android.support.wearable.view.WatchViewStub;
 import android.util.Log;
 import android.view.View;
+import android.view.WindowManager;
 import android.view.animation.AnimationUtils;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -49,6 +50,8 @@ public class MainApp extends Activity implements SensorEventListener, GoogleApiC
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main_app);
 
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
         // declare watch phone connection
         googleApiClient = new GoogleApiClient.Builder(this)
                 .addApi(Wearable.API)
@@ -75,18 +78,17 @@ public class MainApp extends Activity implements SensorEventListener, GoogleApiC
             public void onClick(View view) {
                 if(!sensor_on){
                     sensor_on = true;
-                    heart_rate_img.setImageResource(R.drawable.heart_color_big);
-                    heart_rate_img.startAnimation(AnimationUtils.loadAnimation(getApplicationContext(), R.anim.animation));
+                    startHrSensor();
                 }
                 else{
                     sensor_on = false;
                     heart_rate_img.setImageResource(R.drawable.heart_rate_off);
                     heart_rate_img.clearAnimation();
+                    stopHrSensor();
                 }
             }
         });
 
-        // start heart rate sensor
         mSensorManager = ((SensorManager) getSystemService(SENSOR_SERVICE));
         mHeartRateSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE);
         if (mHeartRateSensor == null) {
@@ -95,15 +97,32 @@ public class MainApp extends Activity implements SensorEventListener, GoogleApiC
                 Log.i("Sensor Type", sensor1.getName() + ": " + sensor1.getType());
             }
         }
+
+    }
+
+    private void startHrSensor(){
+
+        heart_rate_img.setImageResource(R.drawable.heart_color_big);
+        heart_rate_img.startAnimation(AnimationUtils.loadAnimation(getApplicationContext(), R.anim.animation));
+
+        // start heart rate sensor
         mSensorManager.registerListener(this, mHeartRateSensor, SensorManager.SENSOR_DELAY_FASTEST);//define frequency
         Toast.makeText(this, "HR Service Started", Toast.LENGTH_SHORT).show();
+    }
+
+    private void stopHrSensor(){
+        heart_rate_img.setImageResource(R.drawable.heart_rate_off);
+        heart_rate_img.clearAnimation();
+
+        mSensorManager.unregisterListener(this);
+        Toast.makeText(this, "HR Service Stopped", Toast.LENGTH_SHORT).show();
     }
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
         if (sensorEvent.sensor.getType() == Sensor.TYPE_HEART_RATE) {
             hrVal = (int) sensorEvent.values[0];
-            heart_rate_value.setText(hrVal);
+            heart_rate_value.setText(hrVal+"");
             Log.e("Sensor:", hrVal+"");
             // send hr to phone
             SendMessageToPhone sendMessageToPhone = new SendMessageToPhone();
@@ -118,12 +137,8 @@ public class MainApp extends Activity implements SensorEventListener, GoogleApiC
         super.onDestroy();
         if(sensor_on){
             sensor_on = false;
-            heart_rate_img.setImageResource(R.drawable.heart_rate_off);
-            heart_rate_img.clearAnimation();
-
-            mSensorManager.unregisterListener(this);
+            stopHrSensor();
             disconnect();
-            Toast.makeText(this, "HR Service Stopped", Toast.LENGTH_SHORT).show();
         }
     }
 
